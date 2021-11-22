@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+  <!-- The CSS package above applies Google styling to buttons and other elements. -->
+
+  <style>
+    body {
+      text-align: center;
+      width: 50%;
+      height: 50vh;
+      min-height: 50%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #color-categories-button, #un-highlight {
+      width: 65%;
+      margin: 0 auto;
+      display: inline-block;
+    }
+
+    #highlighter-library-button {
+      margin-bottom: 20px;
+    }
+
+    #highlighter-set {
+      height: 50%;
+      max-height: 200%;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .highlighter-line {
+      margin: 0 auto;
+      margin-bottom: 20px;
+      width: 70%;
+    }
+
+    .highlight-button {
+      width: 100%;
+    }
+
+    .extract-button {
+      margin: 0 auto;
+      width: 40%; 
+    }
+
+    #bottom-buttons {
+      margin: 0 auto;
+      margin-left: 10px;
+      margin-right: 10px;
+      display: block;
+      width: 90%;
+    }
+
+    .footer {
+      margin-bottom: 10px;
+    }
+
+    hr.separator {
+      border-top: 1px solid #8c8b8b;
+      float: center;
+      width: 90%;
+    }
+
+    input[type=button] {
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="top">
+    <p>Create categories with labels</p>
+    
+    <input type="button" id="highlighter-library-button" value="Categories" class="share" />
+    
+    <hr class="separator">
+    
+    <p>
+      Choose a color to highlight selected text
+    </p>
+    
+    <input type="button" id="un-highlight" value="Un-highlight">
+  </div>
+
+  <p><b><?= hSet.setName ?></b></p>
+  <div id="highlighter-set">
+    <? for (var i = 0; i < hSet.highlighters.length; i++) { ?>
+      <div class="highlighter-line">
+        <input type="button" class="highlight-button"
+        style="background:<?= hSet.highlighters[i].color ?>; display:block;"
+        value="<?= hSet.highlighters[i].label ?>"/>
+      </div>
+    <? } ?>
+  </div>
+
+  <div class="footer">
+    <hr class="separator">
+    <p><b>Get Categorizations</b></p>
+    
+    <!-- <p>Display categorizations</p> -->
+    <div id="bottom-buttons">
+      <input type="button" class="extract-button" id="extract-highlights-button-chrono" value="Display Categorizations" style="margin-right: 10px;"/>
+      <!-- <input type="button" class="extract-button" id="extract-highlights-button-color" value="By color" /> -->
+    </div>
+  </div>
+
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+  <script>
+  
+  /**
+   * Highlight selected text
+   */
+
+  var LUMINOSITY_BLACK_THRESHOLD = 50;
+  var WHITE_TEXT_HEX_COLOR = '#ffffff';
+
+  // https://stackoverflow.com/questions/1740700/how-to-get-hex-color-value-rather-than-rgb-value
+  var HEX_DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+
+  /**
+   * Converts RGB to hex.
+   */
+  function rgb2hex(rgb) {
+    rgb = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+    return "#" + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+  }
+
+  /**
+   * Converts a number between 0 to 255 to its corresponding value in hex.
+   */
+  function hex(num) {
+    return isNaN(num) ? "00" : HEX_DIGITS[(num - num % 16) / 16] + HEX_DIGITS[num % 16];
+  }
+
+  /**
+   * Gets the luminosity of a hex string color.
+   * @param {String} hexStr A string in the format "#ff00ff".
+   */
+  var getLuminosity = function getLuminosityFromHex(hexStr) {
+    //https://stackoverflow.com/questions/12043187/how-to-check-if-hex-color-is-too-black
+    const c = hexStr.substring(1); // strip #
+    const rgb = parseInt(c, 16); // convert rrggbb to decimal
+    const r = (rgb >> 16) & 0xff; // extract red
+    const g = (rgb >> 8) & 0xff; // extract green
+    const b = (rgb >> 0) & 0xff; // extract blue
+
+    const luma = (0.2126 * r) + (0.7152 * g) + (0.0722 * b); // per ITU-R BT.709
+
+    return luma;
+  };
+
+  // change all dark highlighters to have white font
+  $(document).on('ready', function() {
+    $('.highlight-button').each(function () {
+      const $highlightButton = $(this);
+      const RGBcolor = $highlightButton.css('backgroundColor');
+      const hexColor = rgb2hex(RGBcolor);
+      if (getLuminosity(hexColor) < LUMINOSITY_BLACK_THRESHOLD) {
+        $highlightButton.css('color', WHITE_TEXT_HEX_COLOR);
+      }
+    })
+  });
+
+  /**
+   * Displays the alert error message when the server side highlightSelection fails.
+   */
+  function highlightFailure(e) {
+    google.script.run
+      .withFailureHandler(function () {
+        google.script.run.generalError();
+      })
+      .showRequireSelectionError();
+  }
+
+  /**
+   * Calls the server to highlight the selection with the context's background color.
+   */
+  function highlightSelection() {
+    const RGBcolor = $(this).css('backgroundColor');
+    const hexColor = rgb2hex(RGBcolor);
+    google.script.run.withFailureHandler(highlightFailure).highlightSelection(hexColor);
+  }
+
+  /**
+   * On click, highlight the selection with the button's background color.
+   */
+  $('.highlight-button').on('click', highlightSelection);
+
+
+  /**
+   * Calls the server to unhighlight the selection.
+   */
+  function unhighlightSelection() {
+    google.script.run.withFailureHandler(highlightFailure).unhighlightSelection();
+  }
+
+  /**
+   * On click, highlight the selection with the button's background color.
+   */
+  $('#un-highlight').on('click', unhighlightSelection);
+
+
+  /**
+   * Highlighter Library
+   */
+
+  function openHighlighterLibrary(event) {
+    google.script.run
+      .withFailureHandler(function () {
+        google.script.run.generalError();
+      })
+      .showHighlighterLibraryDialog();
+  }
+  $('#highlighter-library-button').on('click', openHighlighterLibrary);
+
+
+  /**
+   * Extract Highlights
+   */
+  var ORDER_COLOR = 'COLOR';
+  var ORDER_CHRONO = 'CHRONO';
+
+  $('#extract-highlights-button-chrono').on('click', function () {
+    google.script.run
+      .withFailureHandler(function () {
+        google.script.run.generalError();
+      })
+      .showExtractHighlightedTextTargetDocDialog(ORDER_CHRONO);
+  });
+
+  $('#extract-highlights-button-color').on('click', function () {
+    google.script.run
+      .withFailureHandler(function () {
+        google.script.run.generalError();
+      })
+      .showExtractHighlightedTextTargetDocDialog(ORDER_COLOR);
+  });
+  </script>
+</body>
+
+</html>
